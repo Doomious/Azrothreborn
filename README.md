@@ -40,3 +40,20 @@ Levels that use these assets will show missing references until the packs are in
 
 `.uasset`/`.umap` files are binary and can't be merged. They're marked lockable in Git LFS —
 run `git lfs lock <file>` before editing a map or asset and `git lfs unlock <file>` after pushing.
+
+## Maps
+
+- `/Game/Maps/StarfallCrater_WP` — main map (World Partition). Props, foliage chunks, ruins, town plots and FX stream in
+  within 256 m of the player; terrain, water, sky and lighting are always loaded. Open regions from the World Partition window.
+- `/Game/Maps/StarfallCrater` — older non-streaming version, kept as a fallback.
+
+## Crater build pipeline
+
+1. `SourceArt/WorldMap/Tools/build_crater_v2.py <v2 dir> Saved/Crater` — generates terrain, water, splats, town/village
+   plots and placement data (needs numpy, scipy, Pillow, matplotlib).
+2. `flip_obj_y.py <v2>/Terrain <v2>/Water` (required — the OBJ importer mirrors Y), then `pack_crater_masks.py <v2>`.
+3. In the editor console: `py "<project>/SourceArt/WorldMap/Tools/crater_build.py" <stages...>` — see the stage list at the
+   bottom of the script. Full streaming-map build: `wpmap`, then
+   `terrain water rocks ruins foliage outposts emitters fx swim towns night fogmist cull stream save`.
+
+Fog of war and ground mist are tuned in `/Game/StarfallCrater/FX/MPC_FogOfWar` (fog of war only runs during play).

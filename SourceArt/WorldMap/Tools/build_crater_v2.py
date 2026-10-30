@@ -22,6 +22,7 @@ import sys
 import numpy as np
 from PIL import Image
 from scipy import ndimage as ndi
+from scipy.spatial import cKDTree
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
@@ -254,6 +255,37 @@ PATHS = {
     "Shrine_to_East":    [OUTPOSTS["Spire-Foot Shrine"], (3700, 2620), (4350, 2760), (4900, 2700), OUTPOSTS["East Pools"]],
     "Breach_out":        [OUTPOSTS["Breach Gate"], (3165, 4200), (3120, 4500), (3105, 4837)],
 }
+
+# ------------------------------------------------------------------ town + village plots: flat, dry ground near the trails, levelled and
+# kept clear of trees/rocks/lakes so settlements can be built there later. Picked before the lakes so lakes avoid them;
+# each plot gets a short spur path to the nearest trail.
+PLOT_KINDS = [("Town", 110.0, ["Emberford", "Mossgate"]),
+              ("Village", 65.0, ["Fernhollow", "Stillwater", "Thornbrook", "Lanternmoor", "Greywillow"])]
+_brr0 = np.hypot((X - SP[0]) / 440.0, (Y - SP[1]) / 520.0)              # great-lake ellipse (see below)
+_trail = np.vstack([densify([np.array(p, float) for p in pts], 8.0) for pts in PATHS.values()])
+_grade = ndi.gaussian_filter(np.degrees(np.arctan(np.hypot(*np.gradient(h, CELL)))), 12)
+_gy, _gx = np.mgrid[0:RH:20, 0:RW:20]
+_cand = np.column_stack([_gx.ravel() * CELL, _gy.ravel() * CELL])
+_dtrail = cKDTree(_trail).query(_cand)[0]
+_dout = np.min([np.hypot(_cand[:, 0] - p[0], _cand[:, 1] - p[1]) for p in OUTPOSTS.values()], axis=0)
+PLOTS = {}
+for kind, R, names in PLOT_KINDS:
+    ok = (sample(cr, _cand) < 0.8) & (sample(_brr0, _cand) > 1.8) & (sample(rd, _cand) > R + 70) \
+         & (_dout > R + 260) & (_dtrail > R + 15) & (_dtrail < R + 200)
+    rough = np.array([np.std(sample(h, np.array([c + [math.cos(a) * R * f, math.sin(a) * R * f] for a in np.linspace(0, 6.28, 16) for f in (0.5, 1.0)])))
+                      if o else 1e9 for c, o in zip(_cand, ok)])
+    score = rough + sample(_grade, _cand) * 0.3
+    for i in np.argsort(score):
+        if len([n for n in PLOTS if PLOTS[n]["kind"] == kind]) == len(names) or score[i] > 1e8:
+            break
+        c = _cand[i]
+        if all(np.hypot(*(c - q["c"])) > 650 for q in PLOTS.values()):
+            nm = names[len([n for n in PLOTS if PLOTS[n]["kind"] == kind])]
+            PLOTS[nm] = {"kind": kind, "c": c.copy(), "R": R}
+            t = _trail[np.argmin(np.hypot(*(_trail - c).T))]
+            edge = c + (t - c) / np.linalg.norm(t - c) * R * 0.85
+            PATHS["Spur_" + nm] = [tuple(t), tuple(edge)]
+
 path_polys = []
 for nm, pts in PATHS.items():
     pts = [np.array(p, float) for p in pts]
@@ -283,6 +315,14 @@ for nm, p in OUTPOSTS.items():
     h = h * (1 - w_) + z0 * w_
     pad_mask = np.maximum(pad_mask, smoothstep(PAD_R[nm] + 5, PAD_R[nm] - 5, d))
     OUTPOSTS[nm] = np.array([p[0], p[1], z0])
+for nm, pl in PLOTS.items():
+    p, R = pl["c"], pl["R"]
+    d = np.hypot(X - p[0], Y - p[1])
+    z0 = float(np.median(sample(h, np.array([p + [math.cos(a) * R * f, math.sin(a) * R * f] for a in np.linspace(0, 6.28, 24) for f in (0.3, 0.7)]))))
+    w_ = smoothstep(R + 45, R, d)
+    h = h * (1 - w_) + z0 * w_
+    pad_mask = np.maximum(pad_mask, smoothstep(R + 5, R - 5, d))
+    pl["z"] = z0
 
 pd, pz = corridor([(p, z) for _, p, z in path_polys])
 PATH_HALF = 1.2
@@ -305,7 +345,8 @@ path_polys.append(("Ledge_Road", LEDGE[0], LEDGE[1]))
 
 # ------------------------------------------------------------------ small lakes in floor hollows, fed by spring creeks
 hollow = h - ndi.gaussian_filter(h, 25)                          # negative = local depression
-dist_pad = np.min([np.hypot(X - p[0], Y - p[1]) for p in OUTPOSTS.values()], axis=0)
+dist_pad = np.min([np.hypot(X - p[0], Y - p[1]) for p in OUTPOSTS.values()]
+                  + [np.hypot(X - pl["c"][0], Y - pl["c"][1]) - pl["R"] for pl in PLOTS.values()], axis=0)
 # great lake where the spire stood: wobbly ellipse, ~9 m deep, shelving shore
 BRX, BRY = 440.0, 520.0
 bth = np.arctan2((Y - SP[1]) / BRY, (X - SP[0]) / BRX)
@@ -525,6 +566,10 @@ Image.fromarray((negative * 255).astype(np.uint8)).save(os.path.join(OUT, "Negat
 
 units = np.clip(32768 + h * UNITS_PER_M, 0, 65535).astype(np.uint16)
 Image.fromarray(units).save(os.path.join(OUT, f"Heightmap_{RW}x{RH}.png"))
+# low-res terrain height for the mist post-process (16-bit, normalised over [z_min, z_max]); UV (0..1) spans the region
+MIST_Z = (float(h.min()) - 1.0, float(h.max()) + 1.0)
+hm = ndi.gaussian_filter(h, 2)[::4, ::4]
+Image.fromarray(np.round((hm - MIST_Z[0]) / (MIST_Z[1] - MIST_Z[0]) * 65535).astype(np.uint16)).save(os.path.join(OUT, "Mist_Height.png"))
 
 # ------------------------------------------------------------------ terrain tiles (OBJ, 4 m grid, cm, tile-local)
 STEP = 4.0
@@ -788,7 +833,10 @@ for e in EMIT:
 Image.fromarray((em_img * 255).astype(np.uint8)).save(os.path.join(OUT, "Emitter_Map.png"))
 
 # ------------------------------------------------------------------ write placement + info
+PLOTS_W = [{"name": nm, "kind": pl["kind"], "c": [ORIGIN_CM[0] + pl["c"][0] * 100, ORIGIN_CM[1] + pl["c"][1] * 100, pl["z"] * 100],
+            "r_cm": pl["R"] * 100} for nm, pl in PLOTS.items()]
 place = {"ruins": RUINS, "campfires": CAMPFIRES, "origin_cm": ORIGIN_CM, "tiles": tiles, "foliage": FOL, "big_rocks": BIG, "outposts": OUT_W, "bridges": BRIDGES,
+         "plots": PLOTS_W, "mist_height": {"size_cm": [W_M * 100, H_M * 100], "z_cm": [MIST_Z[0] * 100, MIST_Z[1] * 100]},
          "emitters": EMIT, "rim_overlook": [ORIGIN_CM[0] + RIM_OVERLOOK[0] * 100, ORIGIN_CM[1] + RIM_OVERLOOK[1] * 100,
                                              float(sample(h, np.array([RIM_OVERLOOK]))[0]) * 100]}
 json.dump(place, open(os.path.join(SAVED, "crater_v2.json"), "w"))
@@ -798,6 +846,7 @@ info = {"region_origin_cm": ORIGIN_CM, "landscape": {"resolution": [RW, RH], "sc
         "height_range_m": [float(h.min()), float(h.max())], "layers": LAYERS,
         "foliage_counts": {k: len(v) for k, v in FOL.items()}, "big_rocks": len(BIG), "bridges": len(BRIDGES), "lakes": [[round(L_["c"][0]), round(L_["c"][1]), round(L_["R"]), round(L_["z"], 1)] for L_ in LAKES], "creeks": len(CREEKS),
         "outposts": {k: [round(v[0]), round(v[1]), round(v[2])] for k, v in OUT_W.items()},
+        "plots": {p["name"]: [p["kind"], round(p["c"][0]), round(p["c"][1]), round(p["c"][2]), round(p["r_cm"] / 100)] for p in PLOTS_W},
         "emitters": {t: sum(1 for e in EMIT if e["type"] == t) for t in {e["type"] for e in EMIT}},
         "walkable_pct_floor": float((slope[crater_in & (spire < 160)] < 30).mean() * 100),
         "path_max_grade_deg": float(np.percentile(slope[path_core > 0.9], 99))}
@@ -821,6 +870,10 @@ ax.clabel(ci, fmt="%d m", fontsize=6)
 for nm, p in OUTPOSTS.items():
     ax.plot(p[0] / 1000, p[1] / 1000, "o", ms=13, mfc="#ffd24a", mec="black")
     ax.text(p[0] / 1000 + 0.06, p[1] / 1000 - 0.05, nm, fontsize=11, weight="bold", color="white", bbox=dict(fc=(0, 0, 0, 0.55), ec="none"))
+for nm, pl in PLOTS.items():
+    ax.add_patch(plt.Circle((pl["c"][0] / 1000, pl["c"][1] / 1000), pl["R"] / 1000, fill=False, ec="#ff7a3a", lw=2.2, ls="--"))
+    ax.text(pl["c"][0] / 1000, pl["c"][1] / 1000, "%s\n(%s)" % (nm, pl["kind"]), fontsize=9, weight="bold", color="white", ha="center", va="center",
+            bbox=dict(fc=(0.5, 0.2, 0, 0.6), ec="none"))
 for nm, p in FALLS.items():
     ax.plot(p[0] / 1000, p[1] / 1000, "v", ms=12, mfc="#7fd4ff", mec="black")
 ax.plot(RIM_OVERLOOK[0] / 1000, RIM_OVERLOOK[1] / 1000, "^", ms=13, mfc="white", mec="black")
