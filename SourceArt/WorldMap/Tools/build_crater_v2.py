@@ -20,7 +20,7 @@ import os
 import sys
 
 import numpy as np
-from PIL import Image
+from PIL import Image, ImageFilter
 from scipy import ndimage as ndi
 from scipy.spatial import cKDTree
 import matplotlib
@@ -563,6 +563,9 @@ for nm, c, R in SITES:
     ruin_mask = np.maximum(ruin_mask, smoothstep(30, 22, np.hypot(X - c[0], Y - c[1])))
 negative = np.clip(np.maximum.reduce([path_blend * 0.999, pad_mask, wet_core.astype(np.float32), bank * 0.7, cbank * 0.5, Wt["Cliff"], ruin_mask]), 0, 1)
 Image.fromarray((negative * 255).astype(np.uint8)).save(os.path.join(OUT, "Negative_Mask.png"))
+# PCG runtime ground cover reads this (RGB, white = free ground; slightly eroded so plants keep off path edges)
+_free = Image.fromarray(((1 - negative) * 255).astype(np.uint8)).resize((2048, 1536), Image.BILINEAR).filter(ImageFilter.MinFilter(3))
+Image.merge("RGB", (_free, _free, _free)).save(os.path.join(OUT, "PCG_FreeMask.png"))
 
 units = np.clip(32768 + h * UNITS_PER_M, 0, 65535).astype(np.uint16)
 Image.fromarray(units).save(os.path.join(OUT, f"Heightmap_{RW}x{RH}.png"))

@@ -27,8 +27,13 @@ git-ignored. Add each one to the project from your own Fab library, keeping the 
 | `Arapaima_Gigas` |
 | `MuddyGroundPack` |
 | `Medieval_Campfire` |
+| `STF` (Pack03-LandscapePro — clover used by the runtime ground cover) |
 
 Levels that use these assets will show missing references until the packs are installed.
+
+**Player character:** the game mode is Epic's First Person template (`/Game/FirstPerson`, `/Game/Characters`,
+`/Game/Input`), also git-ignored. In the editor: **Add > Add Feature or Content Pack > Blueprint > First Person**, which
+installs it at exactly those paths. Press Play to walk the crater in first person from the Breach Gate.
 
 ## Layout
 
@@ -38,8 +43,8 @@ Levels that use these assets will show missing references until the packs are in
 
 ## Working together
 
-`.uasset`/`.umap` files are binary and can't be merged. They're marked lockable in Git LFS —
-run `git lfs lock <file>` before editing a map or asset and `git lfs unlock <file>` after pushing.
+`.uasset`/`.umap` files are binary and can't be merged, so agree who is editing which map or asset before you start
+(or use `git lfs lock <file>` / `git lfs unlock <file>` to claim it on GitHub).
 
 ## Maps
 

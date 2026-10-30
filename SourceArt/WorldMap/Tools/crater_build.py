@@ -437,6 +437,8 @@ def stage_foliage(only=None):
     for group, pts in DATA["foliage"].items():
         if only and group not in only:
             continue
+        if group in PCG_GROUPS:
+            continue
         meshes = SKINNED.get(group) or STATIC.get(group) or []
         if not meshes or not pts:
             log("skip %s (meshes=%d pts=%d)" % (group, len(meshes), len(pts)))
@@ -893,7 +895,7 @@ def sp(obj, name, val):
     try:
         obj.set_editor_property(name, val)
     except Exception as ex:
-        log("WARN %s.%s: %r" % (obj.get_class().get_name(), name, ex))
+        log("WARN %s.%s: %r" % (type(obj).__name__, name, ex))
 
 
 def stage_night():
@@ -1184,17 +1186,25 @@ def stage_fogmist():
     mpc_path = FXP + "/MPC_FogOfWar"
     mpc = unreal.load_asset(mpc_path) if eal.does_asset_exist(mpc_path) else \
         tools.create_asset("MPC_FogOfWar", FXP, unreal.MaterialParameterCollection, unreal.MaterialParameterCollectionFactoryNew())
-    scal = (("FoWEnabled", 0.0), ("RevealRadius", 9000.0), ("SightRadius", VIS_CM * 0.8), ("ExploredDim", 0.45),
+    scal = (("FoWEnabled", 0.0), ("RevealRadius", 9000.0), ("SightRadius", VIS_CM * 0.8), ("ExploredDim", 0.35),
+            ("ShroudDensity", 1.0), ("ExploredFog", 0.6),
             ("MistRange", VIS_CM), ("MistHeight", 350.0), ("MistDensity", 0.00045), ("MistNear", 400.0))
     vecs = (("PlayerPos", unreal.LinearColor(0, 0, -1e6, 0)), ("MistColor", unreal.LinearColor(0.05, 0.065, 0.09, 1)),
-            ("ShroudColor", unreal.LinearColor(0.006, 0.008, 0.013, 1)))
-    def cp_(cls, n, v):
-        e = cls()
-        e.set_editor_property("parameter_name", n)
-        e.set_editor_property("default_value", v)
-        return e
-    mpc.set_editor_property("scalar_parameters", [cp_(unreal.CollectionScalarParameter, n, v) for n, v in scal])
-    mpc.set_editor_property("vector_parameters", [cp_(unreal.CollectionVectorParameter, n, v) for n, v in vecs])
+            ("ShroudColor", unreal.LinearColor(0.035, 0.043, 0.058, 1)))       # thick moonlit fog bank, not black
+    def params(prop, cls, wanted):
+        # keep existing entries (their GUIDs are what materials reference) and only add new names
+        have = {str(p.get_editor_property("parameter_name")): p for p in mpc.get_editor_property(prop)}
+        out = []
+        for n, v in wanted:
+            e = have.get(n)
+            if e is None:
+                e = cls()
+                e.set_editor_property("parameter_name", n)
+            e.set_editor_property("default_value", v)
+            out.append(e)
+        mpc.set_editor_property(prop, out)
+    params("scalar_parameters", unreal.CollectionScalarParameter, scal)
+    params("vector_parameters", unreal.CollectionVectorParameter, vecs)
 
     def cparam(m, name, x, y):
         e = mel.create_material_expression(m, unreal.MaterialExpressionCollectionParameter, x, y)
@@ -1272,20 +1282,22 @@ for (int i = 0; i < 14; i++) {
 }
 float mist = 1 - exp(-acc * MistDensity);
 col = lerp(col, MistColor.rgb, mist);
-// ---- fog of war (play only): unexplored ground under a drifting shroud, explored-but-out-of-sight ground dimmed
+// ---- fog of war (play only): unexplored ground buried in a thick drifting fog bank; explored-but-out-of-sight ground
+// dimmed and half fogged. ShroudDensity scales both.
 if (FoWEnabled > 0.5 && dist < 1.5e6) {
     float2 uv = (wp.xy - O) / S;
     float inside = all(uv > 0) && all(uv < 1);
     float ex = inside * Texture2DSampleLevel(Exp, ExpSampler, uv, 0).r;
     float sight = 1 - smoothstep(SightRadius * 0.75, SightRadius, length(wp.xy - PlayerPos.xy));
     float lum = dot(col, float3(0.3, 0.59, 0.11));
-    float3 dim = lerp(col, lum.xxx, 0.6) * ExploredDim;
-    col = lerp(dim, col, sight);
+    col = lerp(lerp(col, lum.xxx, 0.6) * ExploredDim, col, sight);
     float c1 = Texture2DSampleLevel(Nz, NzSampler, wp.xy / 9000.0 + t * float2(0.004, -0.002), 0).r;
     float c2 = Texture2DSampleLevel(Nz, NzSampler, wp.xy / 2600.0 - t * float2(0.007, 0.004), 0).r;
-    float3 shroud = ShroudColor.rgb * (0.6 + 1.2 * c1 + 0.5 * c2);
-    float cover = smoothstep(0.15, 0.85, ex + (c2 - 0.5) * 0.25);
-    col = lerp(shroud, col, cover);
+    float c3 = Texture2DSampleLevel(Nz, NzSampler, wp.xy / 700.0 + t * float2(0.012, 0.009), 0).r;
+    float3 shroud = ShroudColor.rgb * (0.45 + 0.9 * c1 + 0.45 * c2 + 0.25 * c3);
+    float unexplored = 1 - smoothstep(0.15, 0.85, ex + (c2 - 0.5) * 0.3);
+    float fog = saturate(max(unexplored, (1 - sight) * ExploredFog) * ShroudDensity);
+    col = lerp(col, shroud, fog);
 }
 return col;"""
     code = code.replace("ZMIN", "%.1f" % z0).replace("ZMAX", "%.1f" % z1)
@@ -1335,7 +1347,7 @@ def stage_cull():
 
 
 WP_MAP = "/Game/Maps/StarfallCrater_WP"
-STREAMED = ("Crater/Foliage", "Crater/Ruins", "Crater/Towns", "Crater/Campfires", "Crater/FX", "Crater/Outposts", "Crater/Emitters", "Crater/Bridges")
+STREAMED = ("Crater/Foliage", "Crater/Ruins", "Crater/Towns", "Crater/Campfires", "Crater/FX", "Crater/Outposts", "Crater/Emitters", "Crater/Bridges", "Crater/Creatures")
 WP_CELL_CM, WP_RANGE_CM = 25600, 25600     # streaming grid: loads everything within 256 m of the player (visual range is 150 m)
 
 
@@ -1379,11 +1391,182 @@ def stage_stream():
     log("stream: %d actors stream within %.0f m, %d always loaded" % (n_on, WP_RANGE_CM / 100, n_off))
 
 
+PCG_GROUPS = {"ST_PNGrass", "ST_WildGrass_MS", "ST_WildGrass_JB", "ST_Sorrel", "ST_Fern", "ST_RockSmall"}   # now generated at runtime
+PCG_LAYERS = [   # name, points per m2, mesh paths, scale range, noise scale (m), density cut, seed
+    ("Grass", 2.5, [p for p in find_assets("/Game/PN_GrassLibrary", "StaticMesh", ["rass_"]) if p.endswith(("_01_mesh", "_02_mesh"))]
+     + find_assets("/Game/Fab/Megascans/Plants/Wild_Grass_vlkhcbxia", "StaticMesh", ["SM_"]), (0.8, 1.4), 30.0, 0.30, 301),
+    ("Clover", 0.5, find_assets("/Game/STF/Pack03-LandscapePro/Environment/Foliage/Clover", "StaticMesh", ["SM_clover"]), (0.8, 1.5), 12.0, 0.45, 302),
+    ("Sorrel", 0.35, find_assets("/Game/Fab/Megascans/Plants/Violet_Wood_Sorrel_uchkajuia", "StaticMesh", ["SM_"]), (0.9, 1.7), 18.0, 0.40, 303),
+    ("Fern", 0.07, find_assets("/Game/PN_Fern/Meshes", "StaticMesh", ["fern_"]), (1.2, 2.2), 45.0, 0.35, 304),
+    ("Stones", 0.06, [JB + "SM_Rock_0%d" % i for i in range(1, 7)], (0.02, 0.09), 25.0, 0.45, 305),
+]
+
+
+def stage_pcg():
+    """Runtime ground cover: grass, clover, sorrel, ferns and stones are generated by PCG only within the visual range of the
+    player (64 m cells within VIS_CM), and cleaned up behind them. Points come from downward rays onto the ground, keep off paths / plots / water / cliffs via PCG_FreeMask, and are patched by noise."""
+    FXP = ROOT + "/PCG"
+    ox, oy = DATA["origin_cm"]
+    sx, sy = DATA["mist_height"]["size_cm"]
+    # UE 5.8: editing the graph or the actors a runtime-generated component tracks makes it refresh, which asserts
+    # (!IsManagedByRuntimeGenSystem) and crashes the editor -- so remove the volume FIRST and add it back LAST
+    for a in eas.get_all_level_actors():
+        if str(a.get_folder_path()).startswith("Crater/PCG"):
+            eas.destroy_actor(a)
+    mask = import_file(os.path.join(V2, "PCG_FreeMask.png"), FXP, "T_PCG_FreeMask")
+    mask.set_editor_property("srgb", False)
+    mask.set_editor_property("compression_settings", unreal.TextureCompressionSettings.TC_VECTOR_DISPLACEMENTMAP)
+    mask.set_editor_property("mip_gen_settings", unreal.TextureMipGenSettings.TMGS_NO_MIPMAPS)
+    unreal.EditorAssetLibrary.save_loaded_asset(mask)
+    path = FXP + "/PCG_GroundCover"
+    if unreal.EditorAssetLibrary.does_asset_exist(path):        # reuse the asset (deleting it refreshes users), clear its nodes
+        g = unreal.load_asset(path)
+        keep = (g.get_input_node(), g.get_output_node())
+        for n in [n for n in g.get_editor_property("nodes") if n not in keep]:
+            g.remove_node(n)
+    else:
+        g = tools.create_asset("PCG_GroundCover", FXP, unreal.PCGGraph, unreal.PCGGraphFactory())
+    sp(g, "use_hierarchical_generation", True)
+    sp(g, "hi_gen_grid_size", unreal.PCGHiGenGrid.GRID64)
+    # generation radii (Radius6400 = VIS_CM, cleanup x1.25) are per-quality structs Python can't write; they are set on the
+    # graph asset with the editor's ObjectTools (GenerationRadii) -- see the crater handoff notes
+
+    def node(cls, **kw):
+        n, s = g.add_node_of_type(cls)
+        for k, v in kw.items():
+            sp(s, k, v)
+        return n, s
+    ray, rs = node(unreal.PCGWorldRayHitSettings)
+    q = rs.get_editor_property("query_params")
+    sp(q, "trace_complex", True)
+    sp(q, "ignore_pcg_hits", True)
+    rs.set_editor_property("query_params", q)
+    tex, ts = node(unreal.PCGTextureSamplerSettings)
+    sp(ts, "texture", mask)
+    sp(ts, "use_absolute_transform", True)
+    sp(ts, "transform", unreal.Transform(location=unreal.Vector(ox + sx / 2, oy + sy / 2, 0), scale=unreal.Vector(sx / 2, sy / 2, 1)))
+    sp(ts, "force_editor_only_cpu_sampling", True)
+    sp(ts, "color_channel", unreal.PCGTextureColorChannel.RED)
+    n_layers = 0
+    for name, ppm, meshes, (s0, s1), nscale, cut, seed in PCG_LAYERS:
+        if not meshes:
+            log("WARN pcg %s: no meshes found, layer skipped" % name)
+            continue
+        smp, ss = node(unreal.PCGSurfaceSamplerSettings, points_per_squared_meter=ppm, looseness=1.0, seed=seed)
+        g.add_edge(ray, "Out", smp, "Surface")
+        nz, ns = node(unreal.PCGSpatialNoiseSettings, seed=seed + 50)
+        sp(ns, "mode", unreal.PCGSpatialNoiseMode.PERLIN2D)
+        sp(ns, "transform", unreal.Transform(scale=unreal.Vector(100.0 / nscale, 100.0 / nscale, 1)))   # 1.0 ~ 100 m features
+        sp(ns, "contrast", 1.6)
+        g.add_edge(smp, "Out", nz, "In")
+        st, sts = node(unreal.PCGSampleTextureSettings)
+        sp(sts, "density_merge_function", unreal.PCGDensityMergeOperation.MULTIPLY)
+        g.add_edge(nz, "Out", st, "Point")
+        g.add_edge(tex, "Out", st, "BaseTexture")
+        df, dfs = node(unreal.PCGDensityFilterSettings, lower_bound=cut, upper_bound=1.0)
+        g.add_edge(st, "Out", df, "In")
+        tp, tps = node(unreal.PCGTransformPointsSettings, seed=seed + 90)
+        sp(tps, "rotation_max", unreal.Rotator(roll=0, pitch=0, yaw=360))
+        sp(tps, "uniform_scale", True)
+        sp(tps, "scale_min", unreal.Vector(s0, s0, s0))
+        sp(tps, "scale_max", unreal.Vector(s1, s1, s1))
+        sp(tps, "offset_min", unreal.Vector(0, 0, -6))
+        sp(tps, "offset_max", unreal.Vector(0, 0, -2))
+        g.add_edge(df, "Out", tp, "In")
+        spn, sps = node(unreal.PCGStaticMeshSpawnerSettings)
+        sel = sps.get_editor_property("mesh_selector_parameters")
+        entries = []
+        for m in meshes:
+            e = unreal.PCGMeshSelectorWeightedEntry()
+            d = e.get_editor_property("descriptor")
+            sp(d, "static_mesh", unreal.load_asset(m))
+            sp(d, "instance_start_cull_distance", int(VIS_CM * 0.8))
+            sp(d, "instance_end_cull_distance", int(VIS_CM))
+            sp(d, "cast_shadow", name in ("Fern", "Stones"))
+            if name != "Stones":
+                bi = d.get_editor_property("body_instance")
+                sp(bi, "collision_profile_name", "NoCollision")
+                sp(d, "body_instance", bi)
+            e.set_editor_property("descriptor", d)
+            sp(e, "weight", 1)
+            entries.append(e)
+        sp(sel, "mesh_entries", entries)
+        g.add_edge(tp, "Out", spn, "In")
+        n_layers += 1
+    unreal.EditorAssetLibrary.save_loaded_asset(g)
+    log("pcg: graph with %d layers (%s); next set GenerationRadii on it, then run stage pcgvolume" % (n_layers, path))
+
+
+def stage_pcgvolume():
+    """Adds the runtime-generation PCG volume over the crater. Every property is set WITHOUT change notifications: in UE 5.8 a
+    notify queues an editor refresh that runs after the component has become runtime-managed and asserts
+    (!IsManagedByRuntimeGenSystem), crashing the editor. Run this last, after the graph (stage pcg) is final."""
+    ox, oy = DATA["origin_cm"]
+    sx, sy = DATA["mist_height"]["size_cm"]
+    NEVER = unreal.PropertyAccessChangeNotifyMode.NEVER
+    for a in eas.get_all_level_actors():
+        if str(a.get_folder_path()).startswith("Crater/PCG"):
+            eas.destroy_actor(a)
+    g = unreal.load_asset(ROOT + "/PCG/PCG_GroundCover")
+    v = eas.spawn_actor_from_class(unreal.PCGVolume, unreal.Vector(ox + sx / 2, oy + sy / 2, 40000))
+    v.set_actor_label("PCG_GroundCover")
+    v.set_folder_path("Crater/PCG")
+    v.set_actor_scale3d(unreal.Vector(sx / 200.0, sy / 200.0, 100000 / 200.0))
+    c = v.get_component_by_class(unreal.PCGComponent)
+    c.get_editor_property("graph_instance").set_editor_property("graph", g, NEVER)
+    c.set_editor_property("is_component_partitioned", True, NEVER)
+    c.set_editor_property("generation_trigger", unreal.PCGComponentGenerationTrigger.GENERATE_AT_RUNTIME, NEVER)
+    v.set_editor_property("is_spatially_loaded", False, NEVER)
+    log("pcgvolume: runtime ground cover volume placed")
+
+
+def ground_z(x, y, z_hint):
+    w = unreal.get_editor_subsystem(unreal.UnrealEditorSubsystem).get_editor_world()
+    hit = unreal.SystemLibrary.line_trace_single(w, unreal.Vector(x, y, z_hint + 20000), unreal.Vector(x, y, z_hint - 20000),
+                                                 unreal.TraceTypeQuery.TRACE_TYPE_QUERY1, True, [], unreal.DrawDebugTrace.NONE, True)
+    return hit.to_tuple()[4].z if hit else z_hint
+
+
+def stage_dinos():
+    """Animated Sauropelta (Fab, free) grazing herds: BP_Sauropelta wanders within 40 m of where it is placed.
+    A herd near the Breach Gate spawn, one animal on each town/village plot."""
+    for a in eas.get_all_level_actors():
+        if str(a.get_folder_path()).startswith("Crater/Creatures"):
+            eas.destroy_actor(a)
+    cls = unreal.load_asset(ROOT + "/Creatures/BP_Sauropelta").generated_class()
+    rnd = random.Random(11)
+    bx, by, bz = DATA["outposts"]["Breach Gate"]
+    spots = [(bx + rnd.uniform(-3500, 3500), by - rnd.uniform(5000, 9000), bz) for _ in range(5)]
+    spots += [(p["c"][0] + rnd.uniform(-3000, 3000), p["c"][1] + rnd.uniform(-3000, 3000), p["c"][2]) for p in DATA["plots"]]
+    for i, (x, y, z) in enumerate(spots):
+        a = eas.spawn_actor_from_class(cls, unreal.Vector(x, y, ground_z(x, y, z)))
+        a.set_actor_rotation(unreal.Rotator(0, 0, rnd.uniform(0, 360)), False)
+        a.set_actor_label("Sauropelta_%02d" % i)
+        a.set_folder_path("Crater/Creatures")
+    log("dinos: %d Sauropelta placed" % len(spots))
+
+
+FP_GAMEMODE ="/Game/FirstPerson/Blueprints/BP_FirstPersonGameMode.BP_FirstPersonGameMode_C"
+
+
+def stage_player():
+    """Walkable first-person mannequin (Epic's First Person template: /Game/FirstPerson, /Game/Characters, /Game/Input):
+    the map's game mode spawns BP_FirstPersonCharacter at the PlayerStart."""
+    reg.scan_paths_synchronous(["/Game/FirstPerson", "/Game/Characters", "/Game/Input"], True)
+    gm = unreal.load_class(None, FP_GAMEMODE)
+    if not gm:
+        raise RuntimeError("missing " + FP_GAMEMODE + " (add the First Person feature pack)")
+    ws = unreal.get_editor_subsystem(unreal.UnrealEditorSubsystem).get_editor_world().get_world_settings()
+    ws.modify()
+    ws.set_editor_property("default_game_mode", gm)
+    log("player: game mode %s" % gm.get_name())
+
+
 STAGES = {"clean": stage_clean, "import": stage_import, "material": stage_material, "terrain": stage_terrain, "water": stage_water,
           "foliage": stage_foliage, "rocks": stage_rocks, "outposts": stage_outposts, "emitters": stage_emitters, "save": stage_save,
           "retile": stage_retile, "fx": stage_fx, "walk": stage_walk, "bridges": stage_bridges, "redress_clean": stage_redress_clean,
           "atmos": stage_atmos, "mossmat": stage_mossmat, "mistmat": stage_mistmat, "night": stage_night, "watermat": stage_watermat, "ruins": stage_ruins, "lakewater": stage_lakewater, "swim": stage_swim,
-          "nocyclone": stage_nocyclone, "towns": stage_towns, "fogmist": stage_fogmist, "cull": stage_cull, "wpmap": stage_wpmap, "stream": stage_stream}
+          "nocyclone": stage_nocyclone, "towns": stage_towns, "fogmist": stage_fogmist, "cull": stage_cull, "wpmap": stage_wpmap, "stream": stage_stream, "player": stage_player, "dinos": stage_dinos, "pcg": stage_pcg, "pcgvolume": stage_pcgvolume}
 args = sys.argv[1:] or ["all"]
 if args == ["all"]:
     args = list(STAGES)

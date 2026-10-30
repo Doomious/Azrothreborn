@@ -7,20 +7,15 @@ Saved/
 *.sln
 .claude/settings.local.json
 
-# Third-party Fab/Marketplace packs (licensed - not redistributable).
-# Each collaborator adds these from their own Fab library. See README.md.
-Content/Clouds_Tunnel_Loop/
-Content/Megaplant_Library/
-Content/PN_GrassLibrary/
-Content/PN_Fern/
-Content/PN_GroundFoliage/
-Content/JustBStudios/
-Content/FC_Coastal_Landscape/
-Content/Fab/
-Content/Arapaima_Gigas/
-Content/MuddyGroundPack/
-Content/Medieval_Campfire/
-
-# Per-user editor folders
-Content/Developers/
-Content/Collections/
+# Content is an allowlist: only the project's own folders are uploaded. Everything else under Content/ is third-party
+# (Fab/Marketplace packs, Epic template content) or per-user (Developers, Collections) and stays local, so a newly
+# downloaded pack can never end up in this public repo by accident. See README.md for the packs collaborators need.
+Content/*
+!Content/Blockout/
+!Content/Maps/
+!Content/Python/
+!Content/StarfallCrater/
+!Content/__ExternalActors__/
+!Content/__ExternalObjects__/
+!Content/azrothreborn.umap
+!Content/azrothreborn_HLOD0_Instancing.uasset
