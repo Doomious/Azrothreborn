@@ -46,6 +46,10 @@ installs it at exactly those paths. Press Play to walk the crater in first perso
 `.uasset`/`.umap` files are binary and can't be merged, so agree who is editing which map or asset before you start
 (or use `git lfs lock <file>` / `git lfs unlock <file>` to claim it on GitHub).
 
+The world map `/Game/azrothreborn` is split into the 11 Titan Walks regions, each with its own editor data layer,
+location volume and content folder, so people can build different regions in parallel. See
+[Docs/Regions/README.md](Docs/Regions/README.md) for the region list, workflow and the `Tools/region_check.sh` commit check.
+
 ## Maps
 
 - `/Game/Maps/StarfallCrater_WP` — main map (World Partition). Props, foliage chunks, ruins, town plots and FX stream in
