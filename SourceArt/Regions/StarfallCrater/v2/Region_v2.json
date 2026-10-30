@@ -1,0 +1,153 @@
+{
+  "region_origin_cm": [
+    528000.0,
+    204400.0
+  ],
+  "landscape": {
+    "resolution": [
+      4033,
+      3025
+    ],
+    "scale_cm": [
+      160,
+      160,
+      512.0
+    ],
+    "components": [
+      32,
+      24
+    ]
+  },
+  "height_range_m": [
+    31.570925582847142,
+    591.5456892434929
+  ],
+  "layers": [
+    "ForestFloor",
+    "Moss",
+    "Grass",
+    "Path",
+    "Mud",
+    "RiverBed",
+    "Talus",
+    "Cliff"
+  ],
+  "foliage_counts": {
+    "SK_Alder": 17898,
+    "SK_Willow": 8045,
+    "SK_Elder": 8000,
+    "SK_Alder_Rim": 8000,
+    "SK_Spruce": 9000,
+    "SK_Spindle": 14000,
+    "SK_Bilberry": 22000,
+    "SK_Lingonberry": 20000,
+    "SK_Reeds": 14000,
+    "ST_PNGrass": 140000,
+    "ST_WildGrass_MS": 30000,
+    "ST_WildGrass_JB": 15000,
+    "ST_Sorrel": 90000,
+    "ST_Fern": 70000,
+    "ST_DeadShrub": 5000,
+    "ST_DryBush": 2500,
+    "ST_CypressRoots": 635,
+    "ST_RockSmall": 2500,
+    "ST_RockBoulder": 531,
+    "ST_MossRock": 9000,
+    "ST_MossBoulder": 459,
+    "ST_Log": 2600
+  },
+  "big_rocks": 19,
+  "bridges": 5,
+  "lakes": [
+    [
+      3088,
+      1652,
+      480,
+      51.5
+    ],
+    [
+      3800,
+      4040,
+      57,
+      51.7
+    ],
+    [
+      4640,
+      3760,
+      34,
+      50.3
+    ],
+    [
+      1720,
+      3600,
+      52,
+      49.9
+    ],
+    [
+      4400,
+      1560,
+      33,
+      59.6
+    ],
+    [
+      4080,
+      1040,
+      53,
+      63.1
+    ],
+    [
+      2160,
+      1080,
+      50,
+      58.3
+    ],
+    [
+      1320,
+      3200,
+      57,
+      48.6
+    ]
+  ],
+  "creeks": 24,
+  "outposts": {
+    "Breach Gate": [
+      843000,
+      603400,
+      4922
+    ],
+    "Clearing Island": [
+      852600,
+      563850,
+      5764
+    ],
+    "Spire-Foot Shrine": [
+      839000,
+      446400,
+      5374
+    ],
+    "Falls Landing": [
+      853000,
+      312400,
+      6106
+    ],
+    "West Grove": [
+      670000,
+      492400,
+      4943
+    ],
+    "East Pools": [
+      1074308,
+      453062,
+      5644
+    ]
+  },
+  "emitters": {
+    "Fireflies": 37,
+    "Campfire": 10,
+    "Mist": 68,
+    "Waterfall": 4,
+    "GroundMist": 277
+  },
+  "walkable_pct_floor": 97.78299183327249,
+  "path_max_grade_deg": 55.63314597388565
+}

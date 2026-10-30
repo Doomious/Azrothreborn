@@ -1,0 +1,22 @@
+# Unreal generated / local
+Binaries/
+DerivedDataCache/
+Intermediate/
+Saved/
+.vs/
+*.sln
+.claude/settings.local.json
+
+# Third-party Fab/Marketplace packs (licensed - not redistributable).
+# Each collaborator adds these from their own Fab library. See README.md.
+Content/Clouds_Tunnel_Loop/
+Content/Megaplant_Library/
+Content/PN_GrassLibrary/
+Content/PN_Fern/
+Content/PN_GroundFoliage/
+Content/JustBStudios/
+Content/FC_Coastal_Landscape/
+Content/Fab/
+Content/Arapaima_Gigas/
+Content/MuddyGroundPack/
+Content/Medieval_Campfire/

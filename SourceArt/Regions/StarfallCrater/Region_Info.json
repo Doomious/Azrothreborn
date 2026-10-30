@@ -1,0 +1,63 @@
+{
+  "heightmap": "Heightmap_4033x3025.png",
+  "resolution": [
+    4033,
+    3025
+  ],
+  "components": [
+    32,
+    24
+  ],
+  "section_size_quads": 63,
+  "sections_per_component": 2,
+  "scale_cm": [
+    160.0,
+    160.0,
+    512.0
+  ],
+  "landscape_location_cm": [
+    528000.0,
+    204400.0,
+    0
+  ],
+  "size_km": [
+    6.45,
+    4.84
+  ],
+  "height_range_m": [
+    -35.67281858853106,
+    858.8644590686606
+  ],
+  "crater_floor_m": 55.0,
+  "spire_summit_m": 718.5528523426201,
+  "layers": [
+    "Canopy",
+    "RainforestFloor",
+    "Clearing",
+    "PlateauGrass",
+    "MossyRock",
+    "CliffRock",
+    "Talus",
+    "Mud",
+    "RiverBed"
+  ],
+  "density_maps": [
+    "Trees_Emergent",
+    "Trees_Canopy",
+    "Understory_Ferns",
+    "Vines_Cliff",
+    "Grass_Clearing",
+    "Reeds_Riverbank"
+  ],
+  "layer_coverage_pct": {
+    "Canopy": 25.31,
+    "RainforestFloor": 6.33,
+    "Clearing": 2.98,
+    "PlateauGrass": 12.53,
+    "MossyRock": 14.26,
+    "CliffRock": 27.59,
+    "Talus": 4.83,
+    "Mud": 2.95,
+    "RiverBed": 3.21
+  }
+}
